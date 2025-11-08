@@ -4,7 +4,7 @@
 #![allow(unused_macros)]
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use hex;
 use hidapi::{HidApi, HidDevice};
 use std::{thread::sleep, time::Duration};
@@ -13,28 +13,54 @@ const VID: u16 = 0x1bcf;
 const PID: u16 = 0x08a0;
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "Redgear-A15",
-    version,
-    about = "Control Redgear A-15 mouse firmware from Linux"
-)]
+#[command(name = "Redgear-A15", version, about = "Control Redgear A-15 mouse")]
 
-pub struct Args {
+pub struct MouseArgs {
+    #[command(flatten)]
+    pub fire_control: Option<FireControl>,
+
+    #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    pub moving_speed: Option<u8>,
+
+    #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    pub double_click_speed: Option<u8>,
+
+    #[arg(long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    pub rolling_speed: Option<u8>,
+
+    #[command(flatten)]
+    pub led_args: Option<LedArgs>,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct FireControl {
     #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
     pub repeat: Option<u8>,
 
     #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
     pub firing_interval: Option<u8>,
 
-    #[command(subcommand)]
-    pub command: Commands,
+    #[arg(long)]
+    pub continuously: Option<ContinouslyState>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Args, Debug, Clone)]
+pub struct LedArgs {
+    #[arg(long)]
+    pub led_brightness: Option<LedBrightness>,
+
+    #[arg(long, value_parser = clap::value_parser!(u8).range(0..=10), help = "Breathing speed (0-10, higher = faster)")]
+    pub breathing_speed: Option<u8>,
+}
+
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Dpi {
-        #[arg(value_parser = clap::value_parser!(u16).range(100..=8000))]
-        value: u16,
+        #[arg(value_enum)]
+        dpi_val: DpiVal,
     },
 
     Led {
@@ -42,14 +68,123 @@ pub enum Commands {
         mode: LedMode,
     },
 
-    Power {
+    LedStatus {
         #[arg(value_enum)]
-        state: LedPowerState,
+        state: LedStatus,
     },
 
-    List,
+    Reset {
+        state: bool,
+    },
+}
 
-    Reset,
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ContinouslyState {
+    Enable,
+    Disable,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum LedBrightness {
+    All,
+    Half,
+}
+
+impl LedBrightness {
+    pub fn hex(&self) -> (&'static str, &'static str) {
+        match self {
+            LedBrightness::All => LED_BRGT_FULL,
+            LedBrightness::Half => LED_BRGT_HALF,
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum LedStatus {
+    Enable,
+    Disable,
+}
+
+impl LedStatus {
+    pub fn hex(&self) -> &'static str {
+        match self {
+            LedStatus::Enable => LED_ENABLE,
+            LedStatus::Disable => LED_DISABLE,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MouseConfig {
+    pub repeat: u8,
+    pub firing_interval: u8,
+    pub continously: ContinouslyState,
+    pub moving_speed: u8,
+    pub double_click_speed: u8,
+    pub rolling_speed: u8,
+    pub led_args: LedArgs,
+    pub led_status: LedStatus,
+    pub dpi: DpiVal,
+    pub led_mode: LedMode,
+    pub reset: bool,
+}
+
+impl Default for MouseConfig {
+    fn default() -> Self {
+        Self {
+            dpi: DpiVal::DPI2,
+            led_mode: LedMode::Dpi,
+            repeat: 3,
+            firing_interval: 6,
+            continously: ContinouslyState::Disable,
+            moving_speed: 6,
+            double_click_speed: 7,
+            rolling_speed: 3,
+            led_status: LedStatus::Enable,
+            led_args: LedArgs {
+                led_brightness: Some(LedBrightness::All),
+                breathing_speed: Some(6),
+            },
+            reset: false,
+        }
+    }
+}
+
+fn apply_command(mut config: MouseConfig, cmd: Commands) -> MouseConfig {
+    match cmd {
+        Commands::Dpi { dpi_val } => config.dpi = dpi_val,
+        Commands::Led { mode } => config.led_mode = mode,
+        Commands::LedStatus { state } => config.led_status = state,
+        Commands::Reset { state } => config.reset = state,
+    }
+    config
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum DpiVal {
+    DPI1,
+    DPI2,
+    DPI3,
+    DPI4,
+    DPI5,
+    DPI6,
+    DPI7,
+    DPI8,
+}
+
+impl DpiVal {
+    pub fn hex(&self) -> &'static str {
+        match self {
+            DpiVal::DPI1 => DPI1,
+            DpiVal::DPI2 => DPI2,
+            DpiVal::DPI3 => DPI3,
+            DpiVal::DPI4 => DPI4,
+            DpiVal::DPI5 => DPI5,
+            DpiVal::DPI6 => DPI6,
+            DpiVal::DPI7 => DPI7,
+            DpiVal::DPI8 => DPI8,
+        }
+    }
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -77,12 +212,6 @@ impl LedMode {
     }
 }
 
-#[derive(ValueEnum, Clone, Debug)]
-pub enum LedPowerState {
-    Enable,
-    Disable,
-}
-
 const DPI1: &str = "040700ff817e807f"; // 1000
 const DPI2: &str = "040701fe817e807f"; // 1600
 const DPI3: &str = "040702fd817e807f"; // 2400
@@ -93,7 +222,7 @@ const DPI7: &str = "040706fd817e807f"; // 7200
 const DPI8: &str = "040707fd817e807f"; // 8000
 
 const CONTINOUUSLY_DISABLED: &str = "0407fdfffffc1bff";
-const CONTINOUUSLY_LED_HEX: &str = "0407fdfffffc64ff"; // Repeat shall be disabled - 04070afdffa1fe03
+const CONTINOUUSLY_ENABLED: &str = "0407fdfffffc64ff"; // Repeat shall be disabled - 04070afdffa1fe03
 const LED_DISABLE: &str = "040701fe8976807f";
 const LED_ENABLE: &str = "040701fe817e807f";
 const LED_MODE_MULTI: &str = "040701fe827d807f";
@@ -103,29 +232,40 @@ const LED_MODE_WALTZ: &str = "040701fe857a807f";
 const LED_MODE_FOUR_SEASONS: &str = "040701fe8679807f";
 const LED_MODE_DPI: &str = "040701fe817e807f";
 const LED_MODE_OFF: &str = "040701fe8778807f";
+const LED_BRGT_FULL: (&str, &str) = ("040745f80638ff00", "0407ff00ffffff71");
+const LED_BRGT_HALF: (&str, &str) = ("040745f80630ff00", "0407ff00ffffff79");
 
 macro_rules! generate_hex_val_for_repeat {
     (
-        $HEX_VAL:expr,
-        $REPEAT_REQ: expr
-    ) => {
-        let hex_val = $HEX_VAL.clone();
+        $REPEAT_REQ: expr,
+        $FULL_HEX: expr
+    ) => {{
+        let hex_val = "04070afd03a1fe03";
         let repeat_req_in_hex = hex::encode([$REPEAT_REQ]);
-        let final_val = $HEX_VAL.replace("fd03", format!("fd{}", repeat_req_in_hex).as_str());
-        println!("{}", final_val);
-    };
+        let final_val = hex_val.replace("fd03", format!("fd{}", repeat_req_in_hex).as_str());
+        let final_hex: Vec<String> = $FULL_HEX
+            .iter()
+            .map(|&x| x.replace(hex_val, final_val.as_str()))
+            .collect();
+        final_hex
+    }};
 }
 
 macro_rules! generate_hex_for_interval {
     (
-        $HEX_VAL:expr,
-        $REPEAT_REQ: expr
-    ) => {
-        let hex_val = $HEX_VAL.clone();
-        let repeat_req_in_hex = hex::encode([$REPEAT_REQ]);
-        let final_val = $HEX_VAL.replace("fe08", format!("fe{}", repeat_req_in_hex).as_str());
-        println!("{}", final_val);
-    };
+        $REPEAT_REQ: expr,
+        $FULL_HEX: expr
+    ) => {{
+        let hex_val = "040721fe08fc94ff";
+        let firing_interval_req_in_hex = hex::encode([$REPEAT_REQ]);
+        let final_val =
+            hex_val.replace("fe08", format!("fe{}", firing_interval_req_in_hex).as_str());
+        let final_hex: Vec<String> = $FULL_HEX
+            .iter()
+            .map(|x| x.replace(hex_val, final_val.as_str()))
+            .collect();
+        final_hex
+    }};
 }
 
 macro_rules! gen_hex_for_led {
@@ -133,7 +273,7 @@ macro_rules! gen_hex_for_led {
         let mode_hex = $MODE.hex();
         let output: Vec<String> = $FULL_HEX
             .iter()
-            .map(|&x| x.replace("040701fe817e807f", mode_hex))
+            .map(|x| x.replace("040701fe817e807f", mode_hex))
             .collect();
         output
     }};
@@ -144,32 +284,80 @@ macro_rules! gen_hex_for_dpi {
         $MODE: expr,
         $FULL_HEX: expr
     ) => {{
+        let mod_hex = $MODE.hex();
         let output: Vec<String> = $FULL_HEX
             .iter()
-            .map(|&x| x.replace("040700ff817e807f", $MODE))
+            .map(|x| x.replace("040701fe817e807f", mod_hex))
             .collect();
         output
     }};
 }
 
-fn set_repeat(val: u8) {
-    let hex_val = "04070afd03a1fe03";
-    if val < 2 {
-        eprintln!("Repeat can only be between 2-255!");
-    } else {
-        generate_hex_val_for_repeat!(hex_val, val);
-    }
+macro_rules! gen_hex_for_led_brgt {
+    (
+        $MODE: expr,
+        $FULL_HEX: expr
+    ) => {{
+        let (first_hex, second_hex) = $MODE.hex();
+        let output: Vec<String> = $FULL_HEX
+            .iter()
+            .map(|x| x.replace("040745f80638ff00", first_hex))
+            .map(|y| y.replace("0407ff00ffffff71", second_hex))
+            .collect();
+        output
+    }};
 }
 
-fn set_firing_interval(val: u8) {
-    let hex_val = "040721fe08fc94ff";
-    if val < 2 {
-        eprintln!("Repeat can only be between 2-255!");
-    } else {
-        generate_hex_for_interval!(hex_val, val);
-    }
-}
-
+const REPEAT_HEX: [&str; 48] = [
+    "0401000000000000",
+    "0403000000000000",
+    "04060000ff000000",
+    "040745f80638ff00",
+    "040702040607090a",
+    "0407070104030002",
+    "04070506ff007fff",
+    "0407ffff00ff00ff",
+    "040700ff0000ffff",
+    "0407000000ffffff",
+    "0407ff00ffffff71",
+    "040701fe817e807f",
+    "0407ffffffffffff",
+    "0407feffffff0101",
+    "0407000104000102",
+    "0407000108000110",
+    "0407000500000700",
+    "0407000800000600",
+    "0407f00101000104",
+    "0407000102000108",
+    "0407000110000500",
+    "0407000700000800",
+    "0407000600f006ff",
+    "0407feffffffffff",
+    "0407fe990e05010e",
+    "040705190e05310e",
+    "040705490e05610e",
+    "040705790e05910e",
+    "040705a90e05c10e",
+    "040705d9ffffffff",
+    "0407ffffffffffff",
+    "0407feffffffffff",
+    "0407fdff00ff00ff",
+    "040700ff00ff00ff",
+    "040700ff00ff00ff",
+    "040700ff00ffffff",
+    "0407feffffffffff",
+    "0407fdffffffff00",
+    "04070000ff000000",
+    "0407ffffff00ff00",
+    "0407ff00ffffff80",
+    "040700ff008000ff",
+    "040780ffffffffff",
+    "04070afd03a1fe03",
+    "040721fe07fc94ff",
+    "0407fdfffffc94ff",
+    "0408000000000000",
+    "0402000000000000",
+];
 const LED_HEX: [&str; 48] = [
     "0401000000000000",
     "0403000000000000",
@@ -306,16 +494,118 @@ fn send_report_to_mouse(packets: Vec<Vec<u8>>, dev: HidDevice) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
-    let mut led_mode = LedMode::Dpi;
-    match args.command {
-        Commands::Led { mode } => led_mode = mode,
-        _ => {}
-    }
+const COMMON_HEX: [&str; 48] = [
+    "0401000000000000",
+    "0403000000000000",
+    "04060000ff000000",
+    "040745f80638ff00",
+    "040702040607090a",
+    "0407070104030002",
+    "04070506ff007fff",
+    "0407ffff00ff00ff",
+    "040700ff0000ffff",
+    "0407000000ffffff",
+    "0407ff00ffffff71",
+    "040701fe817e807f",
+    "0407ffffffffffff",
+    "0407feffffff0101",
+    "0407000104000102",
+    "0407000108000110",
+    "0407000500000700",
+    "0407000800000600",
+    "0407f00101000104",
+    "0407000102000108",
+    "0407000110000500",
+    "0407000700000800",
+    "0407000600f006ff",
+    "0407feffffffffff",
+    "0407fe990e05010e",
+    "040705190e05310e",
+    "040705490e05610e",
+    "040705790e05910e",
+    "040705a90e05c10e",
+    "040705d9ffffffff",
+    "0407ffffffffffff",
+    "0407feffffffffff",
+    "0407fdff00ff00ff",
+    "040700ff00ff00ff",
+    "040700ff00ff00ff",
+    "040700ff00ffffff",
+    "0407feffffffffff",
+    "0407fdffffffff00",
+    "04070000ff000000",
+    "0407ffffff00ff00",
+    "0407ff00ffffff80",
+    "040700ff008000ff",
+    "040780ffffffffff",
+    "04070afd03a1fe03",
+    "040721fe08fc94ff",
+    "0407fdfffffc94ff",
+    "0408000000000000",
+    "0402000000000000",
+];
 
-    let hex_val = gen_hex_for_led!(led_mode, LED_HEX);
-    let packets: Vec<Vec<u8>> = hex_val
+//TODO: Add the
+// - Breating Part
+// - Continously
+// - Reset
+fn main() -> Result<()> {
+    let args = MouseArgs::parse();
+
+    let default_val = MouseConfig::default();
+    let mut repeat = default_val.repeat;
+    let mut firing_interval = default_val.firing_interval;
+    let led_args = default_val.led_args;
+    let led_brightness = led_args.led_brightness.unwrap();
+    let breathing_speed = led_args.breathing_speed.unwrap();
+    let dpi = default_val.dpi;
+
+    if let Some(fire_control) = args.fire_control.clone() {
+        repeat = fire_control.repeat.unwrap_or_default()
+    };
+
+    let repeat_hex = generate_hex_val_for_repeat!(repeat, COMMON_HEX);
+
+    if let Some(firing_control) = args.fire_control {
+        firing_interval = firing_control.firing_interval.unwrap_or_default()
+    };
+
+    let firing_interval_hex = generate_hex_for_interval!(firing_interval, repeat_hex.clone());
+
+    let led_brght_hex = if let Some(LedArgs {
+        led_brightness,
+        breathing_speed,
+    }) = args.led_args
+    {
+        gen_hex_for_led_brgt!(led_brightness.unwrap(), firing_interval_hex.clone())
+    } else {
+        gen_hex_for_led_brgt!(led_brightness, firing_interval_hex.clone())
+    };
+
+    let final_hex = if let Some(commands) = args.command.clone() {
+        match commands {
+            Commands::Dpi { dpi_val } => {
+                gen_hex_for_dpi!(dpi_val, led_brght_hex)
+            }
+            Commands::Led { mode } => {
+                let led_mode = if let Some(Commands::Led { mode }) = args.command {
+                    mode
+                } else {
+                    default_val.led_mode
+                };
+                gen_hex_for_led!(led_mode, led_brght_hex.clone())
+            }
+            Commands::LedStatus { state } => {
+                gen_hex_for_led!(state, led_brght_hex.clone())
+            }
+            _ => Vec::new(),
+        }
+    } else {
+        //FIX: below bro
+        panic!("No Args Provided")
+    };
+
+    let packets: Vec<Vec<u8>> = final_hex
         .iter()
         .map(|val| convert_str_hex(val.as_str()))
         .collect();
