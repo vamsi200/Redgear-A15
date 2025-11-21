@@ -44,7 +44,7 @@ pub struct FireControl {
     pub firing_interval: Option<u8>,
 
     #[arg(long)]
-    pub continuously: Option<ContinouslyState>,
+    pub continously: Option<ContinouslyState>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -52,8 +52,8 @@ pub struct LedArgs {
     #[arg(long)]
     pub led_brightness: Option<LedBrightness>,
 
-    #[arg(long, value_parser = clap::value_parser!(u8).range(0..=10), help = "Breathing speed (0-10, higher = faster)")]
-    pub breathing_speed: Option<u8>,
+    #[arg(long, help = "Breathing speed (1-8, higher = faster)")]
+    pub breathing_speed: Option<BreathingSpeed>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -84,6 +84,14 @@ pub enum ContinouslyState {
     Disable,
 }
 
+impl ContinouslyState {
+    pub fn hex(&self) -> &'static str {
+        match self {
+            ContinouslyState::Enable => CONTINOUUSLY_ENABLED,
+            ContinouslyState::Disable => CONTINOUUSLY_DISABLED,
+        }
+    }
+}
 #[derive(ValueEnum, Clone, Debug)]
 pub enum LedBrightness {
     All,
@@ -143,7 +151,7 @@ impl Default for MouseConfig {
             led_status: LedStatus::Enable,
             led_args: LedArgs {
                 led_brightness: Some(LedBrightness::All),
-                breathing_speed: Some(6),
+                breathing_speed: Some(BreathingSpeed::BS4),
             },
             reset: false,
         }
@@ -305,6 +313,43 @@ macro_rules! gen_hex_for_led_brgt {
             .map(|y| y.replace("0407ff00ffffff71", second_hex))
             .collect();
         output
+    }};
+}
+
+macro_rules! gen_hex_for_breathing_speed {
+    (
+        $MODE: expr,
+        $FULL_HEX: expr
+    ) => {{
+        let breathing_hex = $MODE.hex();
+        let output: Vec<String> = $FULL_HEX
+            .iter()
+            .map(|x| x.replace("040701fe817e807f", breathing_hex))
+            .collect();
+        output
+    }};
+}
+
+macro_rules! gen_hex_for_continously {
+    (
+        $MODE: expr,
+        $FULL_HEX: expr
+    ) => {{
+        let continously_hex = $MODE.hex();
+        if continously_hex == "0407fdfffffc64ff" {
+            let output: Vec<String> = $FULL_HEX
+                .iter()
+                .map(|x| x.replace("0407fdfffffc94ff", continously_hex))
+                .map(|y| y.replace("04070afd03a1fe03", "04070afdffa1fe03"))
+                .collect();
+            output
+        } else {
+            let output: Vec<String> = $FULL_HEX
+                .iter()
+                .map(|x| x.replace("0407fdfffffc94ff", continously_hex))
+                .collect();
+            output
+        }
     }};
 }
 
@@ -494,6 +539,43 @@ fn send_report_to_mouse(packets: Vec<Vec<u8>>, dev: HidDevice) -> Result<()> {
     Ok(())
 }
 
+const BREATHING_SPEED_HEX: [&str; 8] = [
+    "040701fee11e807f",
+    "040701fec13e807f",
+    "040701fea15e807f",
+    "040701fe817e807f",
+    "1040701fe619e807f",
+    "040701fe41be807f",
+    "040701fe21de807f",
+    "040701fe01fe807f",
+];
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum BreathingSpeed {
+    BS1,
+    BS2,
+    BS3,
+    BS4,
+    BS5,
+    BS6,
+    BS7,
+    BS8,
+}
+impl BreathingSpeed {
+    pub fn hex(&self) -> &'static str {
+        match self {
+            BreathingSpeed::BS1 => BREATHING_SPEED_HEX[0],
+            BreathingSpeed::BS2 => BREATHING_SPEED_HEX[1],
+            BreathingSpeed::BS3 => BREATHING_SPEED_HEX[2],
+            BreathingSpeed::BS4 => BREATHING_SPEED_HEX[3],
+            BreathingSpeed::BS5 => BREATHING_SPEED_HEX[4],
+            BreathingSpeed::BS6 => BREATHING_SPEED_HEX[5],
+            BreathingSpeed::BS7 => BREATHING_SPEED_HEX[6],
+            BreathingSpeed::BS8 => BREATHING_SPEED_HEX[7],
+        }
+    }
+}
+
 const COMMON_HEX: [&str; 48] = [
     "0401000000000000",
     "0403000000000000",
@@ -545,9 +627,7 @@ const COMMON_HEX: [&str; 48] = [
     "0402000000000000",
 ];
 
-//TODO: Add the
-// - Breating Part
-// - Continously
+//TODO:
 // - Reset
 fn main() -> Result<()> {
     let args = MouseArgs::parse();
@@ -566,26 +646,36 @@ fn main() -> Result<()> {
 
     let repeat_hex = generate_hex_val_for_repeat!(repeat, COMMON_HEX);
 
-    if let Some(firing_control) = args.fire_control {
+    if let Some(firing_control) = args.fire_control.clone() {
         firing_interval = firing_control.firing_interval.unwrap_or_default()
     };
 
     let firing_interval_hex = generate_hex_for_interval!(firing_interval, repeat_hex.clone());
 
     let led_brght_hex = if let Some(LedArgs {
-        led_brightness,
-        breathing_speed,
-    }) = args.led_args
+        led_brightness: Some(led_brightness),
+        breathing_speed: None,
+    }) = args.led_args.clone()
     {
-        gen_hex_for_led_brgt!(led_brightness.unwrap(), firing_interval_hex.clone())
+        gen_hex_for_led_brgt!(led_brightness, firing_interval_hex.clone())
     } else {
         gen_hex_for_led_brgt!(led_brightness, firing_interval_hex.clone())
+    };
+
+    let breathing_speed_hex = if let Some(LedArgs {
+        led_brightness: None,
+        breathing_speed: Some(breathing_speed),
+    }) = args.led_args.clone()
+    {
+        gen_hex_for_breathing_speed!(breathing_speed, led_brght_hex.clone())
+    } else {
+        gen_hex_for_breathing_speed!(breathing_speed, led_brght_hex.clone())
     };
 
     let final_hex = if let Some(commands) = args.command.clone() {
         match commands {
             Commands::Dpi { dpi_val } => {
-                gen_hex_for_dpi!(dpi_val, led_brght_hex)
+                gen_hex_for_dpi!(dpi_val, breathing_speed_hex)
             }
             Commands::Led { mode } => {
                 let led_mode = if let Some(Commands::Led { mode }) = args.command {
@@ -593,15 +683,83 @@ fn main() -> Result<()> {
                 } else {
                     default_val.led_mode
                 };
-                gen_hex_for_led!(led_mode, led_brght_hex.clone())
+                gen_hex_for_led!(led_mode, breathing_speed_hex.clone())
             }
             Commands::LedStatus { state } => {
-                gen_hex_for_led!(state, led_brght_hex.clone())
+                gen_hex_for_led!(state, breathing_speed_hex.clone())
             }
             _ => Vec::new(),
         }
+    } else if let Some(fire_control_commands) = args.fire_control {
+        match fire_control_commands {
+            FireControl {
+                repeat: Some(repeat),
+                firing_interval: None,
+                ..
+            } => {
+                println!("Called Repeat!!");
+                generate_hex_val_for_repeat!(repeat, COMMON_HEX)
+            }
+
+            FireControl {
+                repeat: None,
+                firing_interval: Some(interval),
+                ..
+            } => {
+                println!("Called firing_interval!!");
+
+                generate_hex_for_interval!(interval, COMMON_HEX)
+            }
+
+            FireControl {
+                repeat: Some(repeat),
+                firing_interval: Some(interval),
+                ..
+            } => {
+                println!("Lil bro called both!");
+                let repeat_hex = generate_hex_val_for_repeat!(repeat, COMMON_HEX);
+                generate_hex_for_interval!(interval, repeat_hex)
+            }
+
+            FireControl {
+                continously: Some(continously),
+                ..
+            } => {
+                match continously {
+                    ContinouslyState::Enable => {
+                        println!("Enabling Continously makes repeat disabled!");
+                    }
+                    ContinouslyState::Disable => {
+                        println!("Called continously!!");
+                    }
+                }
+                gen_hex_for_continously!(continously, repeat_hex)
+            }
+
+            _ => Vec::new(),
+        }
+    } else if let Some(led_args) = args.led_args {
+        match led_args {
+            LedArgs {
+                breathing_speed: Some(breathing_speed),
+                ..
+            } => {
+                println!("Called Breathing Speed");
+                gen_hex_for_breathing_speed!(breathing_speed, COMMON_HEX)
+            }
+            _ => Vec::new(),
+        }
+    } else if let Some(moving_speed) = args.moving_speed {
+        // the instructions seems to be the same for every operation.. like
+        // increasing or decreasing the value
+        todo!()
+    } else if let Some(double_click_speed) = args.double_click_speed {
+        // Same as moving_speed
+        todo!()
+    } else if let Some(rolling_speed) = args.rolling_speed {
+        // Same as moving_speed
+        todo!()
     } else {
-        //FIX: below bro
         panic!("No Args Provided")
     };
 
