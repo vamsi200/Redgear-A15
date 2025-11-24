@@ -1,31 +1,39 @@
-#![allow(unused_variables)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_macros)]
-
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hex;
 use hidapi::{HidApi, HidDevice};
-use std::{thread::sleep, time::Duration};
+use std::{process::exit, thread::sleep, time::Duration};
 
 const VID: u16 = 0x1bcf;
 const PID: u16 = 0x08a0;
 
 #[derive(Parser, Debug)]
 #[command(name = "Redgear-A15", version, about = "Control Redgear A-15 mouse")]
-
 pub struct MouseArgs {
     #[command(flatten)]
     pub fire_control: Option<FireControl>,
 
-    #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    #[arg(
+        short,
+        long,
+        value_parser = clap::value_parser!(u8).range(0..=255),
+        help = "Mouse movement speed (0–255). Default: 6"
+    )]
     pub moving_speed: Option<u8>,
 
-    #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    #[arg(
+        short,
+        long,
+        value_parser = clap::value_parser!(u8).range(0..=255),
+        help = "Double-click speed (0–255). Default: 7"
+    )]
     pub double_click_speed: Option<u8>,
 
-    #[arg(long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    #[arg(
+        long,
+        value_parser = clap::value_parser!(u8).range(0..=255),
+        help = "Mouse scroll/rolling speed (0–255). Default: 3"
+    )]
     pub rolling_speed: Option<u8>,
 
     #[command(flatten)]
@@ -37,45 +45,126 @@ pub struct MouseArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct FireControl {
-    #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    #[arg(
+        short,
+        long,
+        value_parser = clap::value_parser!(u8).range(0..=255),
+        help = "Auto-fire repeat count (0–255). Default: 3"
+    )]
     pub repeat: Option<u8>,
 
-    #[arg(short, long, global = true, value_parser = clap::value_parser!(u8).range(0..=255))]
+    #[arg(
+        short,
+        long,
+        value_parser = clap::value_parser!(u8).range(0..=255),
+        help = "Delay between shots (0–255). Default: 6"
+    )]
     pub firing_interval: Option<u8>,
 
-    #[arg(long)]
+    #[arg(long, help = "Enable/disable continuous firing. Default: Disable")]
     pub continously: Option<ContinouslyState>,
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct LedArgs {
-    #[arg(long)]
+    #[arg(long, help = "LED brightness (All/Half). Default: All")]
     pub led_brightness: Option<LedBrightness>,
 
-    #[arg(long, help = "Breathing speed (1-8, higher = faster)")]
+    #[arg(long, help = "Breathing speed (1–8, higher = faster). Default: BS4")]
     pub breathing_speed: Option<BreathingSpeed>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct GlobalMouseOptions {
+    #[command(flatten)]
+    pub fire_control: Option<FireControl>,
+
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=255),
+          help = "Mouse movement speed (0–255). Default: 6")]
+    pub moving_speed: Option<u8>,
+
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=255),
+          help = "Double-click speed (0–255). Default: 7")]
+    pub double_click_speed: Option<u8>,
+
+    #[arg(long, value_parser = clap::value_parser!(u8).range(0..=255),
+          help = "Mouse scroll/rolling speed (0–255). Default: 3")]
+    pub rolling_speed: Option<u8>,
+
+    #[command(flatten)]
+    pub led_args: Option<LedArgs>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
+    /// Set DPI level
     Dpi {
-        #[arg(value_enum)]
+        #[command(flatten)]
+        opts: GlobalMouseOptions,
+
+        #[arg(
+    help = concat!(
+        "Choose DPI level\n\n",
+        "  DPI Values:\n",
+        "  +------+--------+\n",
+        "  | Name | Value  |\n",
+        "  +------+--------+\n",
+        "  | dpi1 | 1000   |\n",
+        "  | dpi2 | 1600   |\n",
+        "  | dpi3 | 2400   |\n",
+        "  | dpi4 | 3200   |\n",
+        "  | dpi5 | 4800   |\n",
+        "  | dpi6 | 6400   |\n",
+        "  | dpi7 | 7200   |\n",
+        "  | dpi8 | 8000   |\n",
+        "  +------+--------+\n",
+    )
+)]
         dpi_val: DpiVal,
     },
 
+    /// Set LED lighting mode
     Led {
+        #[command(flatten)]
+        opts: GlobalMouseOptions,
+
         #[arg(value_enum)]
         mode: LedMode,
     },
 
+    /// Enable or disable LED lights
     LedStatus {
-        #[arg(value_enum)]
+        #[command(flatten)]
+        opts: GlobalMouseOptions,
+
         state: LedStatus,
     },
 
-    Reset {
-        state: bool,
-    },
+    #[command(about = "Reset all mouse settings to their default values")]
+    Reset,
+}
+pub enum Reset {
+    RepeatVal(u8),
+    FiringInterval(u8),
+    Continously(ContinouslyState),
+    DpiVal(DpiVal),
+    LedStatus(LedStatus),
+    LedBrightness(LedBrightness),
+    LedMode(LedMode),
+    BreathingSpeed(BreathingSpeed),
+}
+
+pub fn reset_val() -> Vec<Reset> {
+    vec![
+        Reset::RepeatVal(3),
+        Reset::FiringInterval(6),
+        Reset::Continously(ContinouslyState::Disable),
+        Reset::DpiVal(DpiVal::DPI6),
+        Reset::LedStatus(LedStatus::Enable),
+        Reset::LedBrightness(LedBrightness::All),
+        Reset::LedMode(LedMode::Multi),
+        Reset::BreathingSpeed(BreathingSpeed::BS6),
+    ]
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -156,16 +245,6 @@ impl Default for MouseConfig {
             reset: false,
         }
     }
-}
-
-fn apply_command(mut config: MouseConfig, cmd: Commands) -> MouseConfig {
-    match cmd {
-        Commands::Dpi { dpi_val } => config.dpi = dpi_val,
-        Commands::Led { mode } => config.led_mode = mode,
-        Commands::LedStatus { state } => config.led_status = state,
-        Commands::Reset { state } => config.reset = state,
-    }
-    config
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -353,158 +432,6 @@ macro_rules! gen_hex_for_continously {
     }};
 }
 
-const REPEAT_HEX: [&str; 48] = [
-    "0401000000000000",
-    "0403000000000000",
-    "04060000ff000000",
-    "040745f80638ff00",
-    "040702040607090a",
-    "0407070104030002",
-    "04070506ff007fff",
-    "0407ffff00ff00ff",
-    "040700ff0000ffff",
-    "0407000000ffffff",
-    "0407ff00ffffff71",
-    "040701fe817e807f",
-    "0407ffffffffffff",
-    "0407feffffff0101",
-    "0407000104000102",
-    "0407000108000110",
-    "0407000500000700",
-    "0407000800000600",
-    "0407f00101000104",
-    "0407000102000108",
-    "0407000110000500",
-    "0407000700000800",
-    "0407000600f006ff",
-    "0407feffffffffff",
-    "0407fe990e05010e",
-    "040705190e05310e",
-    "040705490e05610e",
-    "040705790e05910e",
-    "040705a90e05c10e",
-    "040705d9ffffffff",
-    "0407ffffffffffff",
-    "0407feffffffffff",
-    "0407fdff00ff00ff",
-    "040700ff00ff00ff",
-    "040700ff00ff00ff",
-    "040700ff00ffffff",
-    "0407feffffffffff",
-    "0407fdffffffff00",
-    "04070000ff000000",
-    "0407ffffff00ff00",
-    "0407ff00ffffff80",
-    "040700ff008000ff",
-    "040780ffffffffff",
-    "04070afd03a1fe03",
-    "040721fe07fc94ff",
-    "0407fdfffffc94ff",
-    "0408000000000000",
-    "0402000000000000",
-];
-const LED_HEX: [&str; 48] = [
-    "0401000000000000",
-    "0403000000000000",
-    "04060000ff000000",
-    "040745f80638ff00",
-    "040702040607090a",
-    "0407070104030002",
-    "04070506ff007fff",
-    "0407ffff00ff00ff",
-    "040700ff0000ffff",
-    "0407000000ffffff",
-    "0407ff00ffffff71",
-    "040701fe817e807f",
-    "0407ffffffffffff",
-    "0407feffffff0101",
-    "0407000104000102",
-    "0407000108000110",
-    "0407000500000700",
-    "0407000800000600",
-    "0407f00101000104",
-    "0407000102000108",
-    "0407000110000500",
-    "0407000700000800",
-    "0407000600f006ff",
-    "0407feffffffffff",
-    "0407fe990e05010e",
-    "040705190e05310e",
-    "040705490e05610e",
-    "040705790e05910e",
-    "040705a90e05c10e",
-    "040705d9ffffffff",
-    "0407ffffffffffff",
-    "0407feffffffffff",
-    "0407fdff00ff00ff",
-    "040700ff00ff00ff",
-    "040700ff00ff00ff",
-    "040700ff00ffffff",
-    "0407feffffffffff",
-    "0407fdffffffff00",
-    "04070000ff000000",
-    "0407ffffff00ff00",
-    "0407ff00ffffff80",
-    "040700ff008000ff",
-    "040780ffffffffff",
-    "04070afd02a1fe03",
-    "040721fe7bfc1bff",
-    "0407fdfffffc1bff",
-    "0408000000000000",
-    "0402000000000000",
-];
-
-const DPI_HEX: [&str; 48] = [
-    "0401000000000000",
-    "0403000000000000",
-    "04060000ff000000",
-    "040745f80638ff00",
-    "040702040607090a",
-    "0407070104030002",
-    "04070506ff007fff",
-    "0407ffff00ff00ff",
-    "040700ff0000ffff",
-    "0407000000ffffff",
-    "0407ff00ffffff71",
-    "040700ff817e807f",
-    "0407ffffffffffff",
-    "0407feffffff0101",
-    "0407000104000102",
-    "0407000108000110",
-    "0407000500000700",
-    "0407000800000600",
-    "0407f00101000104",
-    "0407000102000108",
-    "0407000110000500",
-    "0407000700000800",
-    "0407000600f006ff",
-    "0407feffffffffff",
-    "0407fe990e05010e",
-    "040705190e05310e",
-    "040705490e05610e",
-    "040705790e05910e",
-    "040705a90e05c10e",
-    "040705d9ffffffff",
-    "0407ffffffffffff",
-    "0407feffffffffff",
-    "0407fdff00ff00ff",
-    "040700ff00ff00ff",
-    "040700ff00ff00ff",
-    "040700ff00ffffff",
-    "0407feffffffffff",
-    "0407fdffffffff00",
-    "04070000ff000000",
-    "0407ffffff00ff00",
-    "0407ff00ffffff80",
-    "040700ff008000ff",
-    "040780ffffffffff",
-    "04070afd02a1fe03",
-    "040721fe06fc96ff",
-    "0407fdfffffc96ff",
-    "0408000000000000",
-    "0402000000000000",
-];
-
 fn convert_str_hex(hex: &str) -> Vec<u8> {
     hex.as_bytes()
         .chunks(2)
@@ -627,8 +554,6 @@ const COMMON_HEX: [&str; 48] = [
     "0402000000000000",
 ];
 
-//TODO:
-// - Reset
 fn main() -> Result<()> {
     let args = MouseArgs::parse();
 
@@ -638,7 +563,6 @@ fn main() -> Result<()> {
     let led_args = default_val.led_args;
     let led_brightness = led_args.led_brightness.unwrap();
     let breathing_speed = led_args.breathing_speed.unwrap();
-    let dpi = default_val.dpi;
 
     if let Some(fire_control) = args.fire_control.clone() {
         repeat = fire_control.repeat.unwrap_or_default()
@@ -674,21 +598,50 @@ fn main() -> Result<()> {
 
     let final_hex = if let Some(commands) = args.command.clone() {
         match commands {
-            Commands::Dpi { dpi_val } => {
+            Commands::Dpi { dpi_val, .. } => {
                 gen_hex_for_dpi!(dpi_val, breathing_speed_hex)
             }
-            Commands::Led { mode } => {
-                let led_mode = if let Some(Commands::Led { mode }) = args.command {
+            Commands::Led { .. } => {
+                let led_mode = if let Some(Commands::Led { mode, .. }) = args.command {
                     mode
                 } else {
                     default_val.led_mode
                 };
                 gen_hex_for_led!(led_mode, breathing_speed_hex.clone())
             }
-            Commands::LedStatus { state } => {
+            Commands::LedStatus { state, .. } => {
                 gen_hex_for_led!(state, breathing_speed_hex.clone())
             }
-            _ => Vec::new(),
+            Commands::Reset => {
+                let mut reset_hex = Vec::new();
+                for val in reset_val() {
+                    match val {
+                        Reset::RepeatVal(repeat) => {
+                            reset_hex = generate_hex_val_for_repeat!(repeat, COMMON_HEX)
+                        }
+                        Reset::FiringInterval(firing_interval) => {
+                            reset_hex = generate_hex_for_interval!(firing_interval, reset_hex)
+                        }
+                        Reset::Continously(cstate) => {
+                            reset_hex = gen_hex_for_continously!(cstate, reset_hex)
+                        }
+                        Reset::DpiVal(dpival) => reset_hex = gen_hex_for_dpi!(dpival, reset_hex),
+                        Reset::LedStatus(lstatus) => {
+                            reset_hex = gen_hex_for_led!(lstatus, reset_hex)
+                        }
+                        Reset::LedBrightness(led_brightness) => {
+                            reset_hex = gen_hex_for_led_brgt!(led_brightness, reset_hex)
+                        }
+                        Reset::LedMode(led_mode) => {
+                            reset_hex = gen_hex_for_led!(led_mode, reset_hex)
+                        }
+                        Reset::BreathingSpeed(breathing_speed) => {
+                            reset_hex = gen_hex_for_breathing_speed!(breathing_speed, reset_hex)
+                        }
+                    }
+                }
+                reset_hex
+            }
         }
     } else if let Some(fire_control_commands) = args.fire_control {
         match fire_control_commands {
@@ -749,24 +702,26 @@ fn main() -> Result<()> {
             }
             _ => Vec::new(),
         }
-    } else if let Some(moving_speed) = args.moving_speed {
-        // the instructions seems to be the same for every operation.. like
-        // increasing or decreasing the value
+    } else if let Some(..) = args.moving_speed {
+        // the instructions seems to be the same for every operation..
+        // meaning that it is not `changing` anything when increasing or decreasing.
         todo!()
-    } else if let Some(double_click_speed) = args.double_click_speed {
+    } else if let Some(..) = args.double_click_speed {
         // Same as moving_speed
         todo!()
-    } else if let Some(rolling_speed) = args.rolling_speed {
+    } else if let Some(..) = args.rolling_speed {
         // Same as moving_speed
         todo!()
     } else {
-        panic!("No Args Provided")
+        eprintln!("Error: No Args Provided, use --help");
+        exit(1);
     };
 
     let packets: Vec<Vec<u8>> = final_hex
         .iter()
         .map(|val| convert_str_hex(val.as_str()))
         .collect();
+
     let api = HidApi::new()?;
     let dev = api.open(VID, PID)?;
 
