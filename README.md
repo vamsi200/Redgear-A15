@@ -2,6 +2,8 @@
 
 A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 
+> **NOTE: Still in Active Development..**
+
 ## Disclaimer
 
 This project is an unofficial driver and is **NOT** affiliated with, endorsed by, or connected to Redgear or its parent companies in any way.
