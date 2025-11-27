@@ -4,6 +4,40 @@ A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 
 > **NOTE: Still in Active Development..**
 
+> **Another Note:**  
+> The Redgear A-15 normally uses:
+> - **VID:** `0x1BCF`
+> - **PID:** `0x08A0`
+>
+> If your device uses a *different* VID/PID, you can
+> identify the correct values by running:
+>
+> ```bash
+> lsusb
+> ```
+>
+> This will output lines like:
+>
+> ```
+> Bus 001 Device 004: ID 1bcf:08a0 USB Optical Mouse
+> ```
+>
+> Here, `1bcf` is the **VID** and `08a0` is the **PID**.
+>
+> If your device shows different values, update the constants in  
+> `src/main.rs` (or wherever VID/PID are defined):
+>
+> ```rust
+> const VID: u16 = 0xXXXX;
+> const PID: u16 = 0xYYYY;
+> ```
+>
+> Then rebuild the project:
+>
+> ```bash
+> cargo build --release
+> ```
+
 ## Disclaimer
 
 This project is an unofficial driver and is **NOT** affiliated with, endorsed by, or connected to Redgear or its parent companies in any way.
@@ -42,6 +76,8 @@ cd Redgear-A15/
 # Build the project
 cargo build --release
 
+# The compiled binary will be available at:
+#   target/release/redgear-a15
 ```
 
 ## Usage
@@ -138,4 +174,3 @@ This tool communicates directly with the Redgear A-15 mouse via USB HID protocol
 ## License
 
 This Project is Licensed under [MIT](https://github.com/vamsi200/Redgear-A15/blob/main/LICENSE)
-

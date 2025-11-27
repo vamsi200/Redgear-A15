@@ -556,7 +556,6 @@ const COMMON_HEX: [&str; 48] = [
 
 fn main() -> Result<()> {
     let args = MouseArgs::parse();
-
     let default_val = MouseConfig::default();
     let mut repeat = default_val.repeat;
     let mut firing_interval = default_val.firing_interval;
