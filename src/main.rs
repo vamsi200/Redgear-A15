@@ -1,5 +1,6 @@
 use anyhow::Result;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, ValueEnum};
+use core::str;
 use hex;
 use hidapi::{HidApi, HidDevice};
 use std::{process::exit, thread::sleep, time::Duration};
@@ -10,6 +11,9 @@ const PID: u16 = 0x08a0;
 #[derive(Parser, Debug)]
 #[command(name = "Redgear-A15", version, about = "Control Redgear A-15 mouse")]
 pub struct MouseArgs {
+    #[arg(long = "no-confirm", help = "Apply changes without confirmation")]
+    pub no_confirm: bool,
+
     #[command(flatten)]
     pub fire_control: Option<FireControl>,
 
@@ -65,16 +69,16 @@ pub struct FireControl {
     pub continously: Option<ContinouslyState>,
 }
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone, Parser)]
 pub struct LedArgs {
     #[arg(long, help = "LED brightness (All/Half). Default: All")]
     pub led_brightness: Option<LedBrightness>,
 
-    #[arg(long, help = "Breathing speed (1–8, higher = faster). Default: BS4")]
+    #[arg(long, help = "Breathing speed (1–8, higher = faster). Default = 4")]
     pub breathing_speed: Option<BreathingSpeed>,
 }
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone, Parser)]
 pub struct GlobalMouseOptions {
     #[command(flatten)]
     pub fire_control: Option<FireControl>,
@@ -95,31 +99,30 @@ pub struct GlobalMouseOptions {
     pub led_args: Option<LedArgs>,
 }
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(Debug, Clone, Parser)]
 pub enum Commands {
     /// Set DPI level
     Dpi {
         #[command(flatten)]
         opts: GlobalMouseOptions,
 
-        #[arg(
-    help = concat!(
-        "Choose DPI level\n\n",
-        "  DPI Values:\n",
-        "  +------+--------+\n",
-        "  | Name | Value  |\n",
-        "  +------+--------+\n",
-        "  | dpi1 | 1000   |\n",
-        "  | dpi2 | 1600   |\n",
-        "  | dpi3 | 2400   |\n",
-        "  | dpi4 | 3200   |\n",
-        "  | dpi5 | 4800   |\n",
-        "  | dpi6 | 6400   |\n",
-        "  | dpi7 | 7200   |\n",
-        "  | dpi8 | 8000   |\n",
-        "  +------+--------+\n",
-    )
-)]
+        #[arg(help = r#"
+        Choose DPI level
+
+        DPI Values:
+        ┌───────┬────────┐
+        │ Name  │ Value  │
+        ├───────┼────────┤
+        │ 1     │ 1000   │
+        │ 2     │ 1600   │
+        │ 3     │ 2400   │
+        │ 4     │ 3200   │
+        │ 5     │ 4800   │
+        │ 6     │ 6400   │
+        │ 7     │ 7200   │
+        │ 8     │ 8000   │
+        └───────┴────────┘
+        "#)]
         dpi_val: DpiVal,
     },
 
@@ -181,7 +184,7 @@ impl ContinouslyState {
         }
     }
 }
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum LedBrightness {
     All,
     Half,
@@ -196,6 +199,17 @@ impl LedBrightness {
     }
 }
 
+impl std::str::FromStr for LedBrightness {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "All" => Ok(LedBrightness::All),
+            "Half" => Ok(LedBrightness::Half),
+            _ => Err("Error: See --help for possible values"),
+        }
+    }
+}
 #[derive(ValueEnum, Clone, Debug)]
 pub enum LedStatus {
     Enable,
@@ -247,7 +261,7 @@ impl Default for MouseConfig {
     }
 }
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug)]
 pub enum DpiVal {
     DPI1,
     DPI2,
@@ -270,6 +284,23 @@ impl DpiVal {
             DpiVal::DPI6 => DPI6,
             DpiVal::DPI7 => DPI7,
             DpiVal::DPI8 => DPI8,
+        }
+    }
+}
+
+impl str::FromStr for DpiVal {
+    type Err = &'static str;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(DpiVal::DPI1),
+            "2" => Ok(DpiVal::DPI2),
+            "3" => Ok(DpiVal::DPI3),
+            "4" => Ok(DpiVal::DPI4),
+            "5" => Ok(DpiVal::DPI5),
+            "6" => Ok(DpiVal::DPI6),
+            "7" => Ok(DpiVal::DPI7),
+            "8" => Ok(DpiVal::DPI8),
+            _ => Err("Error: See --help for possible values"),
         }
     }
 }
@@ -322,6 +353,7 @@ const LED_MODE_OFF: &str = "040701fe8778807f";
 const LED_BRGT_FULL: (&str, &str) = ("040745f80638ff00", "0407ff00ffffff71");
 const LED_BRGT_HALF: (&str, &str) = ("040745f80630ff00", "0407ff00ffffff79");
 
+// Yes.. these macros could just be functions.
 macro_rules! generate_hex_val_for_repeat {
     (
         $REPEAT_REQ: expr,
@@ -477,7 +509,7 @@ const BREATHING_SPEED_HEX: [&str; 8] = [
     "040701fe01fe807f",
 ];
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug)]
 pub enum BreathingSpeed {
     BS1,
     BS2,
@@ -499,6 +531,23 @@ impl BreathingSpeed {
             BreathingSpeed::BS6 => BREATHING_SPEED_HEX[5],
             BreathingSpeed::BS7 => BREATHING_SPEED_HEX[6],
             BreathingSpeed::BS8 => BREATHING_SPEED_HEX[7],
+        }
+    }
+}
+impl std::str::FromStr for BreathingSpeed {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Self::BS1),
+            "2" => Ok(Self::BS2),
+            "3" => Ok(Self::BS3),
+            "4" => Ok(Self::BS4),
+            "5" => Ok(Self::BS5),
+            "6" => Ok(Self::BS6),
+            "7" => Ok(Self::BS7),
+            "8" => Ok(Self::BS8),
+            _ => Err("Invalid breathing speed"),
         }
     }
 }
@@ -554,7 +603,16 @@ const COMMON_HEX: [&str; 48] = [
     "0402000000000000",
 ];
 
+const BOLD: &str = "\x1b[1m";
+const DIM: &str = "\x1b[2m";
+const RED: &str = "\x1b[31m";
+const GREEN: &str = "\x1b[32m";
+const YELLOW: &str = "\x1b[33m";
+const CYAN: &str = "\x1b[36m";
+const RESET: &str = "\x1b[0m";
+
 fn main() -> Result<()> {
+    use std::io::{self, Write};
     let args = MouseArgs::parse();
     let default_val = MouseConfig::default();
     let mut repeat = default_val.repeat;
@@ -562,37 +620,133 @@ fn main() -> Result<()> {
     let led_args = default_val.led_args;
     let led_brightness = led_args.led_brightness.unwrap();
     let breathing_speed = led_args.breathing_speed.unwrap();
+    let mut changes: Vec<(String, String)> = Vec::new();
+    let mut continously = default_val.continously;
 
-    if let Some(fire_control) = args.fire_control.clone() {
-        repeat = fire_control.repeat.unwrap_or_default()
-    };
+    if let Some(fc) = args.fire_control.as_ref() {
+        if let Some(rep) = fc.repeat {
+            changes.push(("Repeat".into(), rep.to_string()));
+            repeat = rep;
+        }
+        if let Some(intv) = fc.firing_interval {
+            changes.push(("Firing Interval".into(), format!("{}", intv)));
+            firing_interval = intv;
+        }
+        if let Some(cont) = &fc.continously {
+            changes.push(("Continously".into(), format!("{:?}", cont)));
+            continously = cont.to_owned();
+        }
+    }
+
+    if let Some(led) = args.led_args.as_ref() {
+        if let Some(br) = &led.led_brightness {
+            changes.push(("LED Brightness".into(), format!("{:?}", br)));
+        }
+        if let Some(bs) = &led.breathing_speed {
+            changes.push(("LED Breathing Speed".into(), format!("{:?}", bs)));
+        }
+    }
+
+    if let Some(cmd) = args.command.as_ref() {
+        match cmd {
+            Commands::Dpi { dpi_val, .. } => {
+                changes.push(("DPI".into(), format!("{:?}", dpi_val)));
+            }
+            Commands::Led { mode, .. } => {
+                changes.push(("LED Mode".into(), format!("{:?}", mode)));
+            }
+            Commands::LedStatus { state, .. } => {
+                changes.push(("LED Status".into(), format!("{:?}", state)));
+            }
+            Commands::Reset => {
+                changes.push(("Reset".into(), "Factory Defaults".into()));
+            }
+        }
+    }
+
+    if args.moving_speed.is_some() {
+        eprintln!(
+            "{RED}{BOLD}Error:{RESET} Changing 'moving_speed' is not implemented. See notes on GitHub - https://github.com/vamsi200/Redgear-A15/tree/main#some-notes."
+        );
+        std::process::exit(1);
+    }
+
+    if args.double_click_speed.is_some() {
+        eprintln!(
+            "{RED}{BOLD}Error:{RESET} Changing 'double_click_speed' is not implemented. See notes on GitHub - https://github.com/vamsi200/Redgear-A15/tree/main#some-notes"
+        );
+        std::process::exit(1);
+    }
+
+    if args.rolling_speed.is_some() {
+        eprintln!(
+            "{RED}{BOLD}Error:{RESET} Changing 'rolling_speed' is not implemented. See notes on GitHub - https://github.com/vamsi200/Redgear-A15/tree/main#some-notes"
+        );
+        std::process::exit(1);
+    }
+
+    if !args.no_confirm {
+        if changes.is_empty() {
+            eprintln!("{RED}{BOLD}Error:{RESET} No changes detected. Nothing to apply.");
+            std::process::exit(1);
+        }
+
+        if let Some(_) = changes.iter().find(|(x, _)| x == "Continously") {
+            println!("{YELLOW}[INFO]{RESET} Enabling Continously makes repeat disabled!");
+        }
+
+        println!("\n{BOLD}{CYAN}Changes{RESET}");
+        println!("{DIM}──────────────────────────────────────────{RESET}");
+
+        for (field, value) in &changes {
+            println!("{GREEN}+ {RESET}{BOLD}{}:{RESET} {}", field, value);
+        }
+
+        println!("{DIM}──────────────────────────────────────────{RESET}");
+
+        print!("{BOLD}> Apply these changes?{RESET} {YELLOW}[y/N]{RESET}: ");
+        io::stdout().flush().unwrap();
+
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf)?;
+        if !matches!(buf.trim(), "y" | "Y") {
+            println!("{RED}Aborted.{RESET}");
+            return Ok(());
+        }
+    }
 
     let repeat_hex = generate_hex_val_for_repeat!(repeat, COMMON_HEX);
-
-    if let Some(firing_control) = args.fire_control.clone() {
-        firing_interval = firing_control.firing_interval.unwrap_or_default()
-    };
 
     let firing_interval_hex = generate_hex_for_interval!(firing_interval, repeat_hex.clone());
 
     let led_brght_hex = if let Some(LedArgs {
-        led_brightness: Some(led_brightness),
+        led_brightness: Some(led_brght),
         breathing_speed: None,
     }) = args.led_args.clone()
     {
-        gen_hex_for_led_brgt!(led_brightness, firing_interval_hex.clone())
+        gen_hex_for_led_brgt!(led_brght, firing_interval_hex.clone())
     } else {
         gen_hex_for_led_brgt!(led_brightness, firing_interval_hex.clone())
     };
 
+    let continously_hex = if let Some(FireControl {
+        continously: Some(cont),
+        ..
+    }) = args.fire_control.clone()
+    {
+        gen_hex_for_continously!(cont, led_brght_hex)
+    } else {
+        gen_hex_for_continously!(continously, led_brght_hex)
+    };
+
     let breathing_speed_hex = if let Some(LedArgs {
         led_brightness: None,
-        breathing_speed: Some(breathing_speed),
+        breathing_speed: Some(brgt_speed),
     }) = args.led_args.clone()
     {
-        gen_hex_for_breathing_speed!(breathing_speed, led_brght_hex.clone())
+        gen_hex_for_breathing_speed!(brgt_speed, continously_hex.clone())
     } else {
-        gen_hex_for_breathing_speed!(breathing_speed, led_brght_hex.clone())
+        gen_hex_for_breathing_speed!(breathing_speed, continously_hex.clone())
     };
 
     let final_hex = if let Some(commands) = args.command.clone() {
@@ -649,7 +803,6 @@ fn main() -> Result<()> {
                 firing_interval: None,
                 ..
             } => {
-                println!("Called Repeat!!");
                 generate_hex_val_for_repeat!(repeat, COMMON_HEX)
             }
 
@@ -658,8 +811,6 @@ fn main() -> Result<()> {
                 firing_interval: Some(interval),
                 ..
             } => {
-                println!("Called firing_interval!!");
-
                 generate_hex_for_interval!(interval, COMMON_HEX)
             }
 
@@ -668,7 +819,6 @@ fn main() -> Result<()> {
                 firing_interval: Some(interval),
                 ..
             } => {
-                println!("Lil bro called both!");
                 let repeat_hex = generate_hex_val_for_repeat!(repeat, COMMON_HEX);
                 generate_hex_for_interval!(interval, repeat_hex)
             }
@@ -677,14 +827,6 @@ fn main() -> Result<()> {
                 continously: Some(continously),
                 ..
             } => {
-                match continously {
-                    ContinouslyState::Enable => {
-                        println!("Enabling Continously makes repeat disabled!");
-                    }
-                    ContinouslyState::Disable => {
-                        println!("Called continously!!");
-                    }
-                }
                 gen_hex_for_continously!(continously, repeat_hex)
             }
 
@@ -696,20 +838,15 @@ fn main() -> Result<()> {
                 breathing_speed: Some(breathing_speed),
                 ..
             } => {
-                println!("Called Breathing Speed");
                 gen_hex_for_breathing_speed!(breathing_speed, COMMON_HEX)
             }
             _ => Vec::new(),
         }
     } else if let Some(..) = args.moving_speed {
-        // the instructions seems to be the same for every operation..
-        // meaning that it is not `changing` anything when increasing or decreasing.
         todo!()
     } else if let Some(..) = args.double_click_speed {
-        // Same as moving_speed
         todo!()
     } else if let Some(..) = args.rolling_speed {
-        // Same as moving_speed
         todo!()
     } else {
         eprintln!("Error: No Args Provided, use --help");
@@ -724,6 +861,7 @@ fn main() -> Result<()> {
     let api = HidApi::new()?;
     let dev = api.open(VID, PID)?;
 
+    println!();
     if let Ok(_) = send_report_to_mouse(packets, dev) {
         println!("> All reports processed.");
     }
