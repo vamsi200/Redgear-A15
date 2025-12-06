@@ -145,6 +145,8 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
+      --no-confirm
+          Apply changes without confirmation
   -r, --repeat <REPEAT>
           Auto-fire repeat count (0–255). Default: 3
   -f, --firing-interval <FIRING_INTERVAL>
@@ -158,9 +160,9 @@ Options:
       --rolling-speed <ROLLING_SPEED>
           Mouse scroll/rolling speed (0–255). Default: 3
       --led-brightness <LED_BRIGHTNESS>
-          LED brightness (All/Half). Default: All [possible values: all, half]
+          LED brightness (All/Half). Default: All
       --breathing-speed <BREATHING_SPEED>
-          Breathing speed (1–8, higher = faster). Default: BS4 [possible values: bs1, bs2, bs3, bs4, bs5, bs6, bs7, bs8]
+          Breathing speed (1–8, higher = faster). Default = 4
   -h, --help
           Print help
   -V, --version
