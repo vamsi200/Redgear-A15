@@ -86,7 +86,7 @@ cargo build --release
 
 ```bash
 # Set DPI level
-redgear-a15 dpi dpi3  # Sets DPI to 2400
+redgear-a15 dpi 3  # Sets DPI to 2400
 
 # Available DPI levels:
 # dpi1: 1000  | dpi2: 1600  | dpi3: 2400  | dpi4: 3200
@@ -103,10 +103,10 @@ redgear-a15 led <mode>
 redgear-a15 --led-brightness All
 
 # Set breathing speed (1-8, higher = faster)
-redgear-a15 --breathing-speed BS4
+redgear-a15 --breathing-speed 4
 
 # Enable/disable LED
-redgear-a15 led-status <on|off>
+redgear-a15 led-status <enable|disable>
 ```
 
 ### Fire Control (Macro)
@@ -145,6 +145,8 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
+      --no-confirm
+          Apply changes without confirmation
   -r, --repeat <REPEAT>
           Auto-fire repeat count (0–255). Default: 3
   -f, --firing-interval <FIRING_INTERVAL>
@@ -158,9 +160,9 @@ Options:
       --rolling-speed <ROLLING_SPEED>
           Mouse scroll/rolling speed (0–255). Default: 3
       --led-brightness <LED_BRIGHTNESS>
-          LED brightness (All/Half). Default: All [possible values: all, half]
+          LED brightness (All/Half). Default: All
       --breathing-speed <BREATHING_SPEED>
-          Breathing speed (1–8, higher = faster). Default: BS4 [possible values: bs1, bs2, bs3, bs4, bs5, bs6, bs7, bs8]
+          Breathing speed (1–8, higher = faster). Default = 4
   -h, --help
           Print help
   -V, --version
