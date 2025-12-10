@@ -483,16 +483,17 @@ fn send_report_to_mouse(packets: Vec<Vec<u8>>, dev: HidDevice) -> Result<()> {
     for pkts in &packets {
         println!("> SET_REPORT {}", bytes_to_hex(pkts));
         if let Err(e) = dev.send_feature_report(pkts) {
-            eprintln!("! Failed to send: {e}");
-            continue;
+            eprintln!("FATAL: Failed to send report: {e}");
+            break;
         }
 
         sleep(Duration::from_millis(300));
 
         let mut report_id = pkts.clone();
-        println!("< GET_REPORT {}", bytes_to_hex(&report_id));
         if let Err(e) = dev.get_feature_report(&mut report_id) {
-            eprintln!("! Failed to read: {e}");
+            eprintln!("WARN: Failed to read report: {e}");
+        } else {
+            println!("< GET_REPORT {}", bytes_to_hex(&report_id));
         }
     }
     Ok(())
