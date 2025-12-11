@@ -2,9 +2,7 @@
 
 A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 
-> **NOTE: Still in Active Development..**
-
-> **Another Note:**  
+> **Note:**  
 > The Redgear A-15 normally uses:
 > - **VID:** `0x1BCF`
 > - **PID:** `0x08A0`
@@ -25,7 +23,7 @@ A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 > Here, `1bcf` is the **VID** and `08a0` is the **PID**.
 >
 > If your device shows different values, update the constants in  
-> `src/main.rs` (or wherever VID/PID are defined):
+> `src/main.rs`:
 >
 > ```rust
 > const VID: u16 = 0xXXXX;
@@ -109,7 +107,7 @@ redgear-a15 --breathing-speed 4
 redgear-a15 led-status <enable|disable>
 ```
 
-### Fire Control (Macro)
+### Fire Control
 
 ```bash
 # Configure auto-fire with repeat count (0-255, default: 3)
@@ -129,6 +127,16 @@ redgear-a15 --continously <enable|disable>
 # Reset all mouse settings to factory defaults
 redgear-a15 reset
 ```
+These are the values that it will reset to:
+- Repeat - 3
+- Firing Interval - 6
+- Continusely - Disabled
+- DPI Setting - 6400
+- LED Status - Enabled
+- LED Brightness - ALL
+- LED Mode - Multicolor
+- Breathing Speed - 6
+
 
 #### Use --help for more details
 
