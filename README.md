@@ -2,7 +2,10 @@
 
 A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 
-> **Note:**  
+> **Note:**
+> You maybe need to run with **root priv**
+
+
 > The Redgear A-15 normally uses:
 > - **VID:** `0x1BCF`
 > - **PID:** `0x08A0`
