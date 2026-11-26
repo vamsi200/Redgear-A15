@@ -1,8 +1,8 @@
 # Redgear-A15
 
-A Linux tool for controlling the Redgear A-15 gaming mouse settings.
+An unofficial Linux configuration utility for the Redgear A-15 gaming mouse, featuring a retro-themed graphical interface built with Rust and Raylib.
 
-> **Note:**  
+> **Note:**
 > The Redgear A-15 normally uses:
 > - **VID:** `0x1BCF`
 > - **PID:** `0x08A0`
@@ -22,8 +22,8 @@ A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 >
 > Here, `1bcf` is the **VID** and `08a0` is the **PID**.
 >
-> If your device shows different values, update the constants in  
-> `src/main.rs`:
+> If your device shows different values, update the corresponding
+> VID and PID constants in the source code:
 >
 > ```rust
 > const VID: u16 = 0xXXXX;
@@ -38,140 +38,92 @@ A Linux tool for controlling the Redgear A-15 gaming mouse settings.
 
 ## Disclaimer
 
-This project is an unofficial driver and is **NOT** affiliated with, endorsed by, or connected to Redgear or its parent companies in any way.
-
-## Some Notes
-
-During the analysis of the official Windows driver, I saw the USB control packets sent for `moving_speed`, `double_click_speed`, and `rolling_speed` appeared identical regardless of the value selected in the UI.
-
-This strongly suggests that the official driver may not be sending any actual instructions to the hardware for these settings at all, but instead relying on something else.. or it is entirely NOT possible to change these values. As a result, these specific features are currently marked as `todo!()`. And also the same for `Game Mode` and `Office Mode` (In these two cases, the software is NOT sending any packets to the hardware).
-
-I will update the code once I find any solution to this. 
+This project is an unofficial configuration utility and is **NOT**
+affiliated with, endorsed by, or connected to Redgear or its parent
+companies in any way.
 
 ## Features
 
-Control all aspects of your Redgear A-15 mouse directly from the terminal:
+Configure your Redgear A-15 mouse directly through a retro-themed
+graphical interface.
 
-- **DPI Configuration**: Set DPI levels from 1000 to 8000 (8 preset levels)
-- **LED Control**: Customize RGB lighting modes, brightness, and breathing effects
-- **Fire Control**: Configure auto-fire settings with repeat count and firing intervals
-- **Mouse Speed Settings**: Adjust movement speed, double-click speed, and scroll speed
-- **Settings Reset**: Restore all settings to factory defaults
+- **DPI Configuration** — Switch between eight preset DPI levels,
+  ranging from 1000 to 8000.
+- **LED Control** — Customize RGB lighting modes, brightness,
+  breathing speed, and LED status.
+- **Fire Control** — Configure auto-fire repeat count, firing
+  intervals, and continuous firing.
+- **Settings Reset** — Restore mouse settings to their factory defaults.
+- **Native Graphical Interface** — A retro-inspired desktop interface
+  built using Raylib, without a browser or web-based frontend.
+
+## Screenshot
+![sc1](assets/scr1.png)
+
+## Some Notes
+
+During the analysis of the official Windows driver, I observed that
+the USB control packets sent for `moving_speed`, `double_click_speed`,
+and `rolling_speed` appeared identical regardless of the value
+selected in the UI.
+
+This suggests that the official driver may not be sending any actual
+instructions to the hardware for these settings, instead relying on
+software-side mechanisms or some other undocumented behavior.
+
+The same applies to **Game Mode** and **Office Mode**, for which the
+official software did not appear to send any packets to the hardware.
+
+As a result, the following features are currently unsupported:
+
+- Mouse movement speed
+- Double-click speed
+- Scroll speed
+- Game Mode
+- Office Mode
+
+I will update the implementation if I find a solution to these
+limitations.
 
 ## Requirements
 
 - Linux operating system
-- USB access to the Redgear A-15 mouse
+- Redgear A-15 gaming mouse
+- USB access permissions
 - Rust toolchain (for building from source)
+- CMake and a C/C++ compiler
+- System dependencies required by Raylib
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/vamsi200/Redgear-A15
-cd Redgear-A15/
+git clone https://github.com/vamsi200/Redgear-A15.git
+cd Redgear-A15
 
 # Build the project
 cargo build --release
+```
 
-# The compiled binary will be available at:
-#   target/release/redgear-a15
+The compiled binary will be available at:
+
+```
+target/release/redgear-a15
 ```
 
 ## Usage
 
-### DPI Settings
+Launch the application with root privileges:
 
 ```bash
-# Set DPI level
-redgear-a15 dpi 3  # Sets DPI to 2400
-
-# Available DPI levels:
-# dpi1: 1000  | dpi2: 1600  | dpi3: 2400  | dpi4: 3200
-# dpi5: 4800  | dpi6: 6400  | dpi7: 7200  | dpi8: 8000
+sudo ./target/release/redgear-a15
 ```
 
-### LED Configuration
-
-```bash
-# Set LED mode
-redgear-a15 led <mode>
-
-# Set LED brightness
-redgear-a15 --led-brightness All
-
-# Set breathing speed (1-8, higher = faster)
-redgear-a15 --breathing-speed 4
-
-# Enable/disable LED
-redgear-a15 led-status <enable|disable>
-```
-
-### Fire Control
-
-```bash
-# Configure auto-fire with repeat count (0-255, default: 3)
-redgear-a15 -r 5
-
-# Set firing interval/delay (0-255, default: 6)
-redgear-a15 -f 10
-
-# Enable continuous firing
-redgear-a15 --continously <enable|disable>
-```
-
-
-### Reset to Defaults
-
-```bash
-# Reset all mouse settings to factory defaults
-redgear-a15 reset
-```
-
-
-#### Use --help for more details
-
-```bash
-Control Redgear A-15 mouse
-
-Usage: regdear-a15 [OPTIONS] [COMMAND]
-
-Commands:
-  dpi         Set DPI level
-  led         Set LED lighting mode
-  led-status  Enable or disable LED lights
-  reset       Reset all mouse settings to their default values
-  help        Print this message or the help of the given subcommand(s)
-
-Options:
-      --no-confirm
-          Apply changes without confirmation
-  -r, --repeat <REPEAT>
-          Auto-fire repeat count (0–255). Default: 3
-  -f, --firing-interval <FIRING_INTERVAL>
-          Delay between shots (0–255). Default: 6
-      --continously <CONTINOUSLY>
-          Enable/disable continuous firing. Default: Disable [possible values: enable, disable]
-  -m, --moving-speed <MOVING_SPEED>
-          Mouse movement speed (0–255). Default: 6
-  -d, --double-click-speed <DOUBLE_CLICK_SPEED>
-          Double-click speed (0–255). Default: 7
-      --rolling-speed <ROLLING_SPEED>
-          Mouse scroll/rolling speed (0–255). Default: 3
-      --led-brightness <LED_BRIGHTNESS>
-          LED brightness (All/Half). Default: All
-      --breathing-speed <BREATHING_SPEED>
-          Breathing speed (1–8, higher = faster). Default = 4
-  -h, --help
-          Print help
-  -V, --version
-          Print version
-```
-
-## Technical Details
-
-This tool communicates directly with the Redgear A-15 mouse via USB HID protocol.
+> **Note:** Root privileges are required because the application
+> communicates directly with the mouse through USB HID control
+> transfers.
 
 ## License
 
-This Project is Licensed under [MIT](https://github.com/vamsi200/Redgear-A15/blob/main/LICENSE)
+This project is licensed under the
+[MIT License](https://github.com/vamsi200/Redgear-A15/blob/main/LICENSE).
